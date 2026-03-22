@@ -15,7 +15,16 @@
                 <a href="../index.php" class="text-white me-3">Home</a>
                 <a href="../courses.php" class="text-white me-3">Courses</a>
                 <?php if (isLoggedIn()): ?>
-                    <?php regenerateSession(); // Regenerate session periodically ?>
+                    <?php 
+                    // Validate session and IP on each request
+                    if (!validateUserSession() || !validateSessionIP()) {
+                        logAuditEvent('session_invalidated', $_SESSION['user_id'], ['reason' => 'ip_change_or_invalid_session']);
+                        session_destroy();
+                        header('Location: login.php?error=session_expired');
+                        exit;
+                    }
+                    regenerateSession(); // Regenerate session periodically 
+                    ?>
                     <?php if (isAdmin()): ?>
                         <a href="../admin/index.php" class="text-white me-3">Admin</a>
                     <?php endif; ?>
