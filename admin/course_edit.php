@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $title = $course ? 'Edit Course' : 'Add Course';
 $content = '<h2>' . $title . '</h2>';
-$content .= '<form method="post">';
+$content .= '<form method="post" id="course_form">';
 $content .= '<div class="mb-3"><label for="title" class="form-label">Title</label><input type="text" class="form-control" id="title" name="title" value="' . htmlspecialchars($course['title'] ?? '') . '" required></div>';
 $selected_mode = $course['editor_mode'] ?? EDITOR_DEFAULT_MODE;
 $content .= '<div class="mb-3"><label for="editor_mode" class="form-label">Editor Mode</label><select class="form-control" id="editor_mode" name="editor_mode">';
@@ -46,9 +46,46 @@ $content .= '</form>';
 
 $tinyMceApiKey = defined('TINYMCE_API_KEY') && TINYMCE_API_KEY !== '' ? TINYMCE_API_KEY : 'no-api-key';
 $content .= '<script src="https://cdn.tiny.cloud/1/' . rawurlencode($tinyMceApiKey) . '/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>';
-$content .= '<script>function maybeInitTinyMce() { if (document.getElementById("editor_mode").value === "rich") { tinymce.init({ selector: "#description", menubar: false, plugins: "link image lists code help", toolbar: "undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist outdent indent | link image | code | help", height: 300 }); } else { if (tinymce.get("description")) { tinymce.get("description").remove(); } } }
-                        document.getElementById("editor_mode").addEventListener("change", function() { maybeInitTinyMce(); });
-                        maybeInitTinyMce();</script>';
+$content .= '<script>
+function maybeInitTinyMce() {
+    var editorMode = document.getElementById("editor_mode").value;
+    var existingEditor = typeof tinymce !== "undefined" ? tinymce.get("description") : null;
+
+    if (editorMode === "rich") {
+        if (existingEditor) {
+            return;
+        }
+
+        tinymce.init({
+            selector: "#description",
+            menubar: false,
+            plugins: "link image lists code help",
+            toolbar: "undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist outdent indent | link image | code | help",
+            height: 300,
+            setup: function (editor) {
+                editor.on("change keyup", function () {
+                    editor.save();
+                });
+            }
+        });
+    } else if (existingEditor) {
+        existingEditor.save();
+        existingEditor.remove();
+    }
+}
+
+document.getElementById("editor_mode").addEventListener("change", function () {
+    maybeInitTinyMce();
+});
+
+document.getElementById("course_form").addEventListener("submit", function () {
+    if (typeof tinymce !== "undefined") {
+        tinymce.triggerSave();
+    }
+});
+
+maybeInitTinyMce();
+</script>';
 
 
 include '../includes/header.php';

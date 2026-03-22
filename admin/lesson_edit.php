@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $title = $lesson ? 'Edit Lesson' : 'Add Lesson';
 $content = '<h2>' . $title . '</h2>';
-$content .= '<form method="post">';
+$content .= '<form method="post" id="lesson_form">';
 
 if (!$lesson) {
     $courses = getCourses();
@@ -81,9 +81,46 @@ $content .= '</form>';
 
 $tinyMceApiKey = defined('TINYMCE_API_KEY') && TINYMCE_API_KEY !== '' ? TINYMCE_API_KEY : 'no-api-key';
 $content .= '<script src="https://cdn.tiny.cloud/1/' . rawurlencode($tinyMceApiKey) . '/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>';
-$content .= '<script>function maybeInitTinyMceLesson() { if (document.getElementById("editor_mode").value === "rich") { tinymce.init({ selector: "#content", menubar: false, plugins: "link image lists code help", toolbar: "undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist outdent indent | link image | code | help", height: 400 }); } else { if (tinymce.get("content")) { tinymce.get("content").remove(); } } }
-                        document.getElementById("editor_mode").addEventListener("change", function() { maybeInitTinyMceLesson(); });
-                        maybeInitTinyMceLesson();</script>';
+$content .= '<script>
+function maybeInitTinyMceLesson() {
+    var editorMode = document.getElementById("editor_mode").value;
+    var existingEditor = typeof tinymce !== "undefined" ? tinymce.get("content") : null;
+
+    if (editorMode === "rich") {
+        if (existingEditor) {
+            return;
+        }
+
+        tinymce.init({
+            selector: "#content",
+            menubar: false,
+            plugins: "link image lists code help",
+            toolbar: "undo redo | bold italic underline | alignleft aligncenter alignright | bullist numlist outdent indent | link image | code | help",
+            height: 400,
+            setup: function (editor) {
+                editor.on("change keyup", function () {
+                    editor.save();
+                });
+            }
+        });
+    } else if (existingEditor) {
+        existingEditor.save();
+        existingEditor.remove();
+    }
+}
+
+document.getElementById("editor_mode").addEventListener("change", function () {
+    maybeInitTinyMceLesson();
+});
+
+document.getElementById("lesson_form").addEventListener("submit", function () {
+    if (typeof tinymce !== "undefined") {
+        tinymce.triggerSave();
+    }
+});
+
+maybeInitTinyMceLesson();
+</script>';
 
 
 include '../includes/header.php';
