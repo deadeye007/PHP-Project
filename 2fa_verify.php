@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     } else {
         logAuditEvent('2fa_failed', $_SESSION['temp_user_id'], ['code_attempted' => !empty($code), 'backup_attempted' => !empty($backup_code)]);
-        $message = '<div class="alert alert-danger">Invalid authentication code. Please try again.</div>';
+        $message = renderStatusMessage('Invalid authentication code. Please try again.', 'danger');
     }
 }
 

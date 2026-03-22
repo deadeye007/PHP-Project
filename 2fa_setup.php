@@ -51,12 +51,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $backup_codes_output .= '</ul>';
 
-        $message = '<div class="alert alert-info">Scan the QR code or use the secret key below, then verify a code to complete setup.</div>';
+        $message = renderStatusMessage('Scan the QR code or use the secret key below, then verify a code to complete setup.', 'info');
     } elseif (isset($_POST['disable_2fa'])) {
         $stmt = $pdo->prepare("DELETE FROM two_factor_secrets WHERE user_id = ?");
         $stmt->execute([$_SESSION['user_id']]);
         logAuditEvent('2fa_disabled', $_SESSION['user_id']);
-        $message = '<div class="alert alert-success">Two-factor authentication has been disabled.</div>';
+        $message = renderStatusMessage('Two-factor authentication has been disabled.', 'success');
     } elseif (isset($_POST['verify_code'])) {
         $code = trim($_POST['verification_code']);
         $stmt = $pdo->prepare("SELECT secret, enabled FROM two_factor_secrets WHERE user_id = ?");
@@ -70,9 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$_SESSION['user_id']]);
                 logAuditEvent('2fa_enabled', $_SESSION['user_id']);
             }
-            $message = '<div class="alert alert-success">Code verified successfully! Two-factor authentication is enabled.</div>';
+            $message = renderStatusMessage('Code verified successfully! Two-factor authentication is enabled.', 'success');
         } else {
-            $message = '<div class="alert alert-danger">Invalid verification code. Try again.</div>';
+            $message = renderStatusMessage('Invalid verification code. Try again.', 'danger');
         }
     }
 }
@@ -88,7 +88,7 @@ $content = '<h2>Two-Factor Authentication</h2>';
 $content .= $message;
 
 if ($show_qr) {
-    $content .= '<div class="alert alert-info">Scan the QR code with your authenticator app and enter a verification code to finish setup.</div>';
+    $content .= renderStatusMessage('Scan the QR code with your authenticator app and enter a verification code to finish setup.', 'info');
     $content .= '<h3>QR Code</h3>';
     $content .= '<img src="' . htmlspecialchars($qr_url) . '" alt="2FA QR Code" class="img-thumbnail" style="max-width:250px;">';
     $content .= '<p class="mt-2">If the Google QR image does not load, use the fallback image:</p>';
@@ -107,7 +107,7 @@ if ($show_qr) {
     $content .= '<p><a href="2fa_setup.php" class="btn btn-outline-secondary">Cancel</a></p>';
 }
 elseif ($tfa_data && $tfa_data['enabled']) {
-    $content .= '<div class="alert alert-info">Two-factor authentication is currently <strong>enabled</strong>.</div>';
+    $content .= renderStatusMessage('Two-factor authentication is currently <strong>enabled</strong>.', 'info');
     $content .= '<h3>Test Authentication</h3>';
     $content .= '<form method="post" class="mb-3">';
     $content .= '<div class="mb-3">';
@@ -120,7 +120,7 @@ elseif ($tfa_data && $tfa_data['enabled']) {
     $content .= '<button type="submit" name="disable_2fa" class="btn btn-danger" onclick="return confirm(\'Are you sure you want to disable two-factor authentication?\')">Disable 2FA</button>';
     $content .= '</form>';
 } else {
-    $content .= '<div class="alert alert-warning">Two-factor authentication is currently <strong>disabled</strong>.</div>';
+    $content .= renderStatusMessage('Two-factor authentication is currently <strong>disabled</strong>.', 'warning');
     $content .= '<p>Two-factor authentication adds an extra layer of security to your account by requiring a time-based code from an authenticator app in addition to your password.</p>';
     $content .= '<h3>Setup Instructions</h3>';
     $content .= '<ol>';

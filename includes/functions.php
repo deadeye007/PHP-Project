@@ -77,6 +77,22 @@ function sanitizeInput($data) {
     return htmlspecialchars(strip_tags(trim($data)));
 }
 
+function renderStatusMessage($message, $type = 'info') {
+    if ($message === null || $message === '') {
+        return '';
+    }
+
+    $allowedTypes = ['success', 'danger', 'warning', 'info'];
+    if (!in_array($type, $allowedTypes, true)) {
+        $type = 'info';
+    }
+
+    $liveMode = $type === 'danger' ? 'assertive' : 'polite';
+    $role = $type === 'danger' ? 'alert' : 'status';
+
+    return '<div class="alert alert-' . $type . '" role="' . $role . '" aria-live="' . $liveMode . '">' . $message . '</div>';
+}
+
 // Sanitize HTML content for rich text (course/lesson descriptions)
 function sanitizeHTML($html) {
     // Allowed tags set in config

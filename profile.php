@@ -18,11 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     
     // Verify current password
     if (!password_verify($current_password, $user['password'])) {
-        $message = '<div class="alert alert-danger">Current password is incorrect.</div>';
+        $message = renderStatusMessage('Current password is incorrect.', 'danger');
     } elseif (strlen($new_password) < 8) {
-        $message = '<div class="alert alert-danger">New password must be at least 8 characters long.</div>';
+        $message = renderStatusMessage('New password must be at least 8 characters long.', 'danger');
     } elseif ($new_password !== $confirm_password) {
-        $message = '<div class="alert alert-danger">New passwords do not match.</div>';
+        $message = renderStatusMessage('New passwords do not match.', 'danger');
     } else {
         // Update password
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
         // Log password change
         logAuditEvent('password_changed', $_SESSION['user_id']);
         
-        $message = '<div class="alert alert-success">Password changed successfully. All other sessions have been logged out.</div>';
+        $message = renderStatusMessage('Password changed successfully. All other sessions have been logged out.', 'success');
         
         // Refresh user data
         $user = getUser($_SESSION['user_id']);

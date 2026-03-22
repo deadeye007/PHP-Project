@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($quiz['time_limit_seconds'])) {
         $elapsed = time() - (int)($_SESSION['quiz_start_times'][$quiz_id] ?? time());
         if ($elapsed > (int)$quiz['time_limit_seconds']) {
-            $message = '<div class="alert alert-danger">Time has expired for this quiz. Please start a new attempt.</div>';
+            $message = renderStatusMessage('Time has expired for this quiz. Please start a new attempt.', 'danger');
             unset($_SESSION['quiz_start_times'][$quiz_id]);
         } else {
             $result = gradeQuizSubmission($quiz_id, $_SESSION['user_id'], $_POST['answers'] ?? []);
@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: quiz_results.php?attempt_id=' . $result['attempt_id']);
                 exit;
             }
-            $message = '<div class="alert alert-danger">' . htmlspecialchars($result['message']) . '</div>';
+            $message = renderStatusMessage(htmlspecialchars($result['message']), 'danger');
         }
     } else {
         $result = gradeQuizSubmission($quiz_id, $_SESSION['user_id'], $_POST['answers'] ?? []);
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: quiz_results.php?attempt_id=' . $result['attempt_id']);
             exit;
         }
-        $message = '<div class="alert alert-danger">' . htmlspecialchars($result['message']) . '</div>';
+        $message = renderStatusMessage(htmlspecialchars($result['message']), 'danger');
     }
 }
 

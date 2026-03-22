@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $title = 'Register';
 $content = '<h2>Register</h2>';
 if (isset($error)) {
-    $content .= '<div class="alert alert-danger">' . htmlspecialchars($error) . '</div>';
+    $content .= renderStatusMessage(htmlspecialchars($error), 'danger');
 }
 $content .= '
     <form method="post">

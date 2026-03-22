@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $message = '<div class="alert alert-danger">' . htmlspecialchars($result['message']) . '</div>';
+    $message = renderStatusMessage(htmlspecialchars($result['message']), 'danger');
     $question = array_merge($question ?: [], $_POST);
     $existingAnswers = $_POST['answers'] ?? $existingAnswers;
     $selectedCorrectIndex = isset($_POST['correct_answer']) ? (int)$_POST['correct_answer'] : null;

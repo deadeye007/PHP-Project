@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $message = '<div class="alert alert-danger">' . htmlspecialchars($result['message']) . '</div>';
+    $message = renderStatusMessage(htmlspecialchars($result['message']), 'danger');
     $quiz = array_merge($quiz ?: [], $_POST);
 }
 
