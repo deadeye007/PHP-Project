@@ -185,32 +185,91 @@ function invalidateOtherSessions($user_id, $current_session_id) {
     logAuditEvent('password_change_sessions_invalidated', $user_id, ['action' => 'invalidated_other_sessions']);
 }
 
-// Two-factor authentication: Generate TOTP secret
+// Base32 encode/decode helpers for TOTP
+function base32Encode($data) {
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $binary = '';
+    $output = '';
+
+    foreach (str_split($data) as $char) {
+        $binary .= str_pad(decbin(ord($char)), 8, '0', STR_PAD_LEFT);
+    }
+
+    while (strlen($binary) % 5 !== 0) {
+        $binary .= '0';
+    }
+
+    foreach (str_split($binary, 5) as $chunk) {
+        $output .= $alphabet[bindec($chunk)];
+    }
+
+    while (strlen($output) % 8 !== 0) {
+        $output .= '=';
+    }
+
+    return $output;
+}
+
+function base32Decode($base32) {
+    $base32 = strtoupper($base32);
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $base32 = rtrim($base32, '=');
+    $binary = '';
+
+    foreach (str_split($base32) as $char) {
+        $pos = strpos($alphabet, $char);
+        if ($pos === false) {
+            return false;
+        }
+        $binary .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
+    }
+
+    $output = '';
+    foreach (str_split($binary, 8) as $byte) {
+        if (strlen($byte) < 8) continue;
+        $output .= chr(bindec($byte));
+    }
+
+    return $output;
+}
+
+// Two-factor authentication: Generate TOTP secret (Base32 for authenticator apps)
 function generateTOTPSecret() {
-    return bin2hex(random_bytes(16)); // 32 character hex string
+    $randomBytes = random_bytes(20); // 160-bit secret
+    return rtrim(base32Encode($randomBytes), '=');
 }
 
 // Two-factor authentication: Verify TOTP code
 function verifyTOTPCode($secret, $code) {
-    // Simple TOTP implementation (in production, use a proper TOTP library)
+    $secretKey = base32Decode($secret);
+    if ($secretKey === false) {
+        // fallback for old hex secrets
+        $secretKey = hex2bin($secret);
+    }
+
+    if ($secretKey === false) {
+        return false;
+    }
+
     $time = floor(time() / 30); // 30-second windows
-    
-    for ($i = -1; $i <= 1; $i++) { // Check current, previous, and next time window
+    for ($i = -1; $i <= 1; $i++) {
         $time_window = $time + $i;
-        $hash = hash_hmac('sha1', pack('N*', 0, $time_window), hex2bin($secret), true);
-        $offset = ord($hash[19]) & 0xf;
+        $time_bytes = pack('N*', 0, $time_window);
+        $hash = hash_hmac('sha1', $time_bytes, $secretKey, true);
+        $offset = ord($hash[19]) & 0x0f;
+
         $code_generated = (
             ((ord($hash[$offset]) & 0x7f) << 24) |
             ((ord($hash[$offset + 1]) & 0xff) << 16) |
             ((ord($hash[$offset + 2]) & 0xff) << 8) |
             (ord($hash[$offset + 3]) & 0xff)
         ) % 1000000;
-        
+
         if (str_pad($code_generated, 6, '0', STR_PAD_LEFT) === $code) {
             return true;
         }
     }
-    
+
     return false;
 }
 ?>
