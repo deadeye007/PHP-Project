@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - .:/var/www/html
+
+  db:
+    image: mysql:8.0
+    env_file:
+      - .env
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/01-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql
+      - ./database/02-sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
+
+volumes:
+  db_data:
