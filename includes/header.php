@@ -38,7 +38,6 @@
     <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
-    <a href="#main-content" class="skip-link">Skip to main content</a>
     <header class="bg-primary text-white p-3">
         <div class="container">
             <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
