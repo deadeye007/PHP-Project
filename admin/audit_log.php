@@ -15,8 +15,8 @@ $stmt = $pdo->query("SELECT a.*, u.username FROM audit_log a LEFT JOIN users u O
 $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $content .= '<div class="table-responsive">';
-$content .= '<table class="table table-striped table-sm">';
-$content .= '<thead><tr><th>Time</th><th>User</th><th>Event</th><th>IP Address</th><th>Details</th></tr></thead>';
+$content .= '<table class="table table-striped table-sm" role="table" aria-label="Security Audit Log">';
+$content .= '<thead><tr><th scope="col">Time</th><th scope="col">User</th><th scope="col">Event</th><th scope="col">IP Address</th><th scope="col">Details</th></tr></thead>';
 $content .= '<tbody>';
 
 foreach ($events as $event) {
@@ -36,8 +36,12 @@ foreach ($events as $event) {
     $event_class = 'table-light';
     if (strpos($event['event_type'], 'failed') !== false || strpos($event['event_type'], 'blocked') !== false) {
         $event_class = 'table-danger';
-    } elseif (strpos($event['event_type'], 'success') !== false) {
+    } elseif (strpos($event['event_type'], '2fa_required') !== false) {
+        $event_class = 'table-info';
+    } elseif (strpos($event['event_type'], '2fa_verified') !== false || strpos($event['event_type'], 'success') !== false) {
         $event_class = 'table-success';
+    } elseif (strpos($event['event_type'], 'login') !== false) {
+        $event_class = 'table-warning';
     }
     
     $content .= '<tr class="' . $event_class . '">';

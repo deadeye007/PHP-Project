@@ -153,6 +153,26 @@ html[data-text-size="x-large"] {
     color: #fca5a5 !important;
 }
 
+[data-bs-theme="dark"] .table-success {
+    background-color: #134e4a;
+    color: #d1fae5;
+}
+
+[data-bs-theme="dark"] .table-info {
+    background-color: #0e7490;
+    color: #cffafe;
+}
+
+[data-bs-theme="dark"] .table-warning {
+    background-color: #a16207;
+    color: #fef3c7;
+}
+
+[data-bs-theme="dark"] .table-danger {
+    background-color: #7f1d1d;
+    color: #fee2e2;
+}
+
 [data-bs-theme="dark"] .alert-success {
     background-color: #14532d;
     border-color: #166534;
