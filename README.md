@@ -31,6 +31,8 @@ A PHP-based learning platform with courses, lessons, quizzes, and user progress 
 - Login with username: `admin`, password: `password`
 - Access admin panel at `/admin/` after logging in
 - Manage courses, lessons, and users
+- Use the new **Backup Database** function in the admin dashboard to download all tables as a ZIP archive (CSV files)
+- Use the new **Import Database** function in the admin dashboard to upload a backup archive and rehydrate tables (duplicate prevention + pre-checks are built in)
 
 ## Security Notes
 - Passwords are hashed using `password_hash()`.
