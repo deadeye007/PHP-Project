@@ -721,6 +721,9 @@ function gradeQuizSubmission($quiz_id, $user_id, $submitted_answers) {
             checkAndAwardCredentials($user_id, 'quiz_passed', $quiz_id);
         }
 
+        // Send quiz result notification to student
+        notifyQuizResultPosted($user_id, $quiz_id, $score, $max_score, $percentage, $passed);
+
         return [
             'success' => true,
             'attempt_id' => $attempt_id,
@@ -1484,6 +1487,281 @@ function getMessageRecipients($user_id, $search = '') {
     ");
     $stmt->execute([$user_id, $search, $search]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// ===== NOTIFICATION MESSAGING SYSTEM =====
+
+// Notify users of course announcement
+function notifyCourseAnnouncement($course_id, $announcement_title, $announcement_content, $created_by_id) {
+    global $pdo;
+
+    $course = getCourse($course_id);
+    if (!$course) {
+        return false;
+    }
+
+    // Get all enrolled students (those with progress in the course)
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT u.id
+        FROM users u
+        LEFT JOIN user_progress up ON u.id = up.user_id
+        LEFT JOIN lessons l ON up.lesson_id = l.id
+        WHERE l.course_id = ? AND u.role = 'user'
+    ");
+    $stmt->execute([$course_id]);
+    $students = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($students)) {
+        return false;
+    }
+
+    $sender_id = $created_by_id;
+    $subject = "📢 Course Announcement: " . $announcement_title;
+    $content = "New announcement in " . $course['title'] . ":\n\n" . $announcement_content;
+
+    $count = 0;
+    foreach ($students as $student_id) {
+        if (sendMessage($sender_id, $student_id, $subject, $content)['success']) {
+            $count++;
+        }
+    }
+
+    return $count > 0;
+}
+
+// Notify student of quiz result posted
+function notifyQuizResultPosted($user_id, $quiz_id, $score, $max_score, $percentage, $passed) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT q.title, l.title as lesson_title, c.title as course_title
+        FROM quizzes q
+        JOIN lessons l ON q.lesson_id = l.id
+        JOIN courses c ON l.course_id = c.id
+        WHERE q.id = ?
+    ");
+    $stmt->execute([$quiz_id]);
+    $quiz = $stmt->fetch();
+
+    if (!$quiz) {
+        return false;
+    }
+
+    $status = $passed ? '✅ Passed' : '❌ Did not pass';
+    $subject = "Quiz Result Posted: " . $quiz['title'];
+    $content = "Your quiz result for \"" . $quiz['title'] . "\" in " . $quiz['course_title'] . " has been posted.\n\n" .
+        "Score: $score / $max_score ($percentage%)\n" .
+        "Status: $status\n\n" .
+        "Visit your grades page to view more details.";
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify student of grade/lesson completion
+function notifyLessonGraded($user_id, $lesson_id, $grade_info = []) {
+    global $pdo;
+
+    $lesson = getLesson($lesson_id);
+    if (!$lesson) {
+        return false;
+    }
+
+    $course = getCourse($lesson['course_id']);
+    $subject = "📝 Grade Posted: " . $lesson['title'];
+    $content = "Your grade for the lesson \"" . $lesson['title'] . "\" in " . $course['title'] . " has been posted.\n\n";
+
+    if (!empty($grade_info)) {
+        if (isset($grade_info['score']) && isset($grade_info['max_score'])) {
+            $percentage = ($grade_info['max_score'] > 0) ? ($grade_info['score'] / $grade_info['max_score'] * 100) : 0;
+            $content .= "Score: " . $grade_info['score'] . " / " . $grade_info['max_score'] . " (" . number_format($percentage, 1) . "%)\n";
+        }
+        if (isset($grade_info['feedback'])) {
+            $content .= "\nInstructor Feedback:\n" . $grade_info['feedback'] . "\n";
+        }
+    }
+
+    $content .= "\nVisit your grades page to view all your grades.";
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify student of assignment posted
+function notifyAssignmentPosted($course_id, $assignment_title, $assignment_description, $due_date, $created_by_id) {
+    global $pdo;
+
+    $course = getCourse($course_id);
+    if (!$course) {
+        return false;
+    }
+
+    // Get all enrolled students
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT u.id
+        FROM users u
+        LEFT JOIN user_progress up ON u.id = up.user_id
+        LEFT JOIN lessons l ON up.lesson_id = l.id
+        WHERE l.course_id = ? AND u.role = 'user'
+    ");
+    $stmt->execute([$course_id]);
+    $students = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($students)) {
+        return false;
+    }
+
+    $sender_id = $created_by_id;
+    $due_date_formatted = $due_date ? date('F j, Y', strtotime($due_date)) : 'Not specified';
+    $subject = "📋 New Assignment: " . $assignment_title;
+    $content = "A new assignment has been posted in " . $course['title'] . ".\n\n" .
+        "Title: " . $assignment_title . "\n" .
+        "Due Date: " . $due_date_formatted . "\n\n" .
+        "Description:\n" . $assignment_description;
+
+    $count = 0;
+    foreach ($students as $student_id) {
+        if (sendMessage($sender_id, $student_id, $subject, $content)['success']) {
+            $count++;
+        }
+    }
+
+    return $count > 0;
+}
+
+// Notify student of assignment feedback
+function notifyAssignmentFeedback($user_id, $assignment_title, $feedback, $score = null, $max_score = null) {
+    global $pdo;
+
+    $subject = "📧 Feedback on Assignment: " . $assignment_title;
+    $content = "You have received feedback on your assignment \"" . $assignment_title . "\".\n\n";
+
+    if ($score !== null && $max_score !== null) {
+        $percentage = ($max_score > 0) ? ($score / $max_score * 100) : 0;
+        $content .= "Score: $score / $max_score (" . number_format($percentage, 1) . "%)\n\n";
+    }
+
+    $content .= "Feedback:\n" . $feedback . "\n\n" .
+        "Please review the feedback and resubmit if necessary.";
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify users of course enrollment changes
+function notifyCourseEnrollment($user_id, $course_id, $action = 'enrolled') {
+    global $pdo;
+
+    $course = getCourse($course_id);
+    if (!$course) {
+        return false;
+    }
+
+    if ($action === 'enrolled') {
+        $subject = "✅ Welcome to: " . $course['title'];
+        $content = "You have been enrolled in the course \"" . $course['title'] . "\".\n\n" .
+            "Description:\n" . $course['description'] . "\n\n" .
+            "Start learning now!";
+    } elseif ($action === 'unenrolled') {
+        $subject = "🚪 Unenrolled from: " . $course['title'];
+        $content = "You have been unenrolled from the course \"" . $course['title'] . "\".";
+    } else {
+        return false;
+    }
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify instructor of student submission (for assignments)
+function notifyStudentSubmission($instructor_id, $student_id, $assignment_title, $submission_details = '') {
+    global $pdo;
+
+    $student = getUser($student_id);
+    $subject = "📤 New Submission: " . $assignment_title;
+    $content = "Student " . $student['username'] . " has submitted \"" . $assignment_title . "\".\n\n";
+
+    if (!empty($submission_details)) {
+        $content .= "Submission Details:\n" . $submission_details . "\n\n";
+    }
+
+    $content .= "Please review and provide feedback.";
+
+    return sendMessage(1, $instructor_id, $subject, $content)['success'];
+}
+
+// Notify student of password reset
+function notifyPasswordReset($user_id) {
+    global $pdo;
+
+    $subject = "🔐 Your password has been changed";
+    $content = "Your Learning Platform password has been successfully changed.\n\n" .
+        "If you did not make this change, please contact support immediately.\n\n" .
+        "For security, all your other sessions have been logged out.";
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify user of course deadline approaching
+function notifyCourseDeadlineApproaching($user_id, $course_id, $days_remaining) {
+    global $pdo;
+
+    $course = getCourse($course_id);
+    if (!$course) {
+        return false;
+    }
+
+    $subject = "⏰ Reminder: Course deadline approaching";
+    $content = "The course \"" . $course['title'] . "\" has a deadline in $days_remaining days.\n\n" .
+        "Please complete the remaining lessons and quizzes to earn your certificate.\n\n" .
+        "Visit your course page now to continue learning.";
+
+    return sendSystemMessage($user_id, $subject, $content)['success'];
+}
+
+// Notify instructor of student at-risk (low grades/progress)
+function notifyStudentAtRisk($instructor_id, $student_id, $course_id, $risk_reason) {
+    global $pdo;
+
+    $student = getUser($student_id);
+    $course = getCourse($course_id);
+
+    $subject = "⚠️ Student At Risk: " . $student['username'];
+    $content = "Student " . $student['username'] . " in course \"" . $course['title'] . "\" is at risk.\n\n" .
+        "Reason: " . $risk_reason . "\n\n" .
+        "Please consider reaching out to the student to provide additional support.";
+
+    return sendMessage(1, $instructor_id, $subject, $content)['success'];
+}
+
+// Send bulk message to all course students
+function sendBulkMessageToStudents($course_id, $subject, $content, $sender_id) {
+    global $pdo;
+
+    $course = getCourse($course_id);
+    if (!$course) {
+        return ['success' => false, 'count' => 0];
+    }
+
+    // Get all enrolled students
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT u.id
+        FROM users u
+        LEFT JOIN user_progress up ON u.id = up.user_id
+        LEFT JOIN lessons l ON up.lesson_id = l.id
+        WHERE l.course_id = ? AND u.role = 'user'
+    ");
+    $stmt->execute([$course_id]);
+    $students = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($students)) {
+        return ['success' => false, 'count' => 0];
+    }
+
+    $count = 0;
+    foreach ($students as $student_id) {
+        if (sendMessage($sender_id, $student_id, $subject, $content)['success']) {
+            $count++;
+        }
+    }
+
+    return ['success' => $count > 0, 'count' => $count];
 }
 
 ?>

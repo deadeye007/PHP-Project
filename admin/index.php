@@ -26,8 +26,11 @@ $content .= '</div>';
 
 $content .= '<div class="row mt-3">';
 $content .= '<div class="col-md-6"><div class="card"><div class="card-body"><h5 class="card-title">Certificates & Badges</h5><p>Create and manage certificates and achievement badges for learners.</p><a href="certificates_badges.php" class="btn btn-outline-warning">Manage Achievements</a></div></div></div>';
-$content .= '<div class="col-md-6"><div class="card"><div class="card-body"><h5 class="card-title">Security</h5><p>View audit logs and security events</p><a href="audit_log.php" class="btn btn-warning">View Audit Log</a></div></div></div>';
+$content .= '<div class="col-md-6"><div class="card"><div class="card-body"><h5 class="card-title">Announcements & Notifications</h5><p>Send course announcements, platform-wide messages, and grade notifications.</p><a href="announcements.php" class="btn btn-outline-info">Send Announcements</a></div></div></div>';
 $content .= '</div>';
+
+$content .= '<div class="row mt-3">';
+$content .= '<div class="col-md-12"><div class="card"><div class="card-body"><h5 class="card-title">Security & Maintenance</h5><p>View audit logs and monitor security events</p><a href="audit_log.php" class="btn btn-warning">View Audit Log</a></div></div></div>';
 
 $content .= '<div aria-live="polite" aria-atomic="true" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
   <div id="backupToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
