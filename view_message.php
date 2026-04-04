@@ -55,7 +55,7 @@ include 'includes/header.php';
                     $is_sent = $msg['sender_id'] === $user_id;
                     $msg_user = $is_sent ? 'admin' : $other_user['username'];
                     ?>
-                    <div class="card mb-3 <?php echo $is_sent ? 'bg-light' : ''; ?>">
+                    <div class="card mb-3 <?php echo $is_sent ? 'message-sent' : 'message-received'; ?>">
                         <div class="card-header">
                             <div class="d-flex justify-content-between">
                                 <strong>

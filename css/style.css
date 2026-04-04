@@ -269,3 +269,92 @@ img {
     margin: 0 auto;
     padding: 0 18.75px;
 }
+
+/* Card and Message Contrast Improvements */
+[data-bs-theme="dark"] .card-header {
+    background-color: #374151;
+    color: #f3f4f6;
+    border-color: #4b5563;
+}
+
+[data-bs-theme="dark"] .card-body {
+    color: #f3f4f6;
+}
+
+/* bg-light in dark mode should be darker */
+[data-bs-theme="dark"] .bg-light {
+    background-color: #111827 !important;
+    color: #f3f4f6 !important;
+}
+
+/* Ensure text visibility in cards */
+[data-bs-theme="dark"] .card strong {
+    color: #f9fafb;
+}
+
+[data-bs-theme="dark"] .card a {
+    color: #93c5fd;
+}
+
+[data-bs-theme="dark"] .card a:hover {
+    color: #bfdbfe;
+}
+
+/* Badge colors in dark mode */
+[data-bs-theme="dark"] .badge {
+    color: #ffffff;
+}
+
+/* Ensure code blocks are readable */
+[data-bs-theme="dark"] code {
+    background-color: #111827;
+    color: #f9fafb;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+/* Message styling for clear distinction */
+.message-sent,
+.message-received {
+    border-left: 4px solid;
+}
+
+.message-sent {
+    border-left-color: #22c55e;
+}
+
+.message-received {
+    border-left-color: #3b82f6;
+}
+
+[data-bs-theme="dark"] .message-sent {
+    background-color: rgba(34, 197, 94, 0.08);
+}
+
+[data-bs-theme="dark"] .message-received {
+    background-color: rgba(59, 130, 246, 0.08);
+}
+
+/* Light mode message styling */
+[data-bs-theme="light"] .message-sent {
+    background-color: rgba(34, 197, 94, 0.05);
+}
+
+[data-bs-theme="light"] .message-received {
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Table styling in dark mode */
+[data-bs-theme="dark"] .table-light {
+    background-color: #374151;
+    color: #f3f4f6;
+}
+
+[data-bs-theme="dark"] .table-light th {
+    background-color: #4b5563;
+    color: #f3f4f6;
+}
+
+[data-bs-theme="dark"] .table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
