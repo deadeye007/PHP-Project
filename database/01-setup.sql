@@ -245,3 +245,48 @@ CREATE TABLE user_badges (
     FOREIGN KEY (badge_id) REFERENCES badges(id),
     UNIQUE KEY unique_user_badge (user_id, badge_id)
 );
+
+-- Messaging System (Local, in-platform messaging)
+
+-- Messages table for direct messaging between users
+CREATE TABLE messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sender_id INT NOT NULL,
+    recipient_id INT NOT NULL,
+    subject VARCHAR(255),
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL,
+    FOREIGN KEY (sender_id) REFERENCES users(id),
+    FOREIGN KEY (recipient_id) REFERENCES users(id),
+    INDEX idx_recipient (recipient_id),
+    INDEX idx_sender (sender_id),
+    INDEX idx_created_at (created_at)
+);
+
+-- Message threads for grouped conversations (optional, for threaded discussions)
+CREATE TABLE message_threads (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    course_id INT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES courses(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Message thread posts
+CREATE TABLE message_thread_posts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    thread_id INT NOT NULL,
+    user_id INT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (thread_id) REFERENCES message_threads(id),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    INDEX idx_thread (thread_id),
+    INDEX idx_created_at (created_at)
+);

@@ -61,6 +61,15 @@
                         <a href="../admin/index.php" class="text-white me-3">Admin</a>
                     <?php endif; ?>
                         <a href="../grades.php" class="text-white me-3">My Grades</a>
+                        <a href="../inbox.php" class="text-white me-3">
+                            Messages
+                            <?php
+                            $unread_count = getUnreadMessageCount($_SESSION['user_id']);
+                            if ($unread_count > 0) {
+                                echo '<span class="badge bg-danger ms-1">' . $unread_count . '</span>';
+                            }
+                            ?>
+                        </a>
                         <a href="../profile.php" class="text-white me-3">Profile</a>
                         <a href="../logout.php" class="text-white">Logout</a>
                 <?php else: ?>
