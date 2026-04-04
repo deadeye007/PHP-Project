@@ -1,7 +1,7 @@
 /* Base styles */
 :root {
     color-scheme: light dark;
-    font-size: 18px;
+    font-size: 22.5px;
     --focus-color: #0d6efd;
     --focus-ring: rgba(13, 110, 253, 0.35);
 }
@@ -14,15 +14,15 @@ body {
 }
 
 h1 {
-    font-size: 2.25rem;
+    font-size: 2.8125rem;
 }
 
 h2 {
-    font-size: 1.75rem;
+    font-size: 2.1875rem;
 }
 
 h3 {
-    font-size: 1.4rem;
+    font-size: 1.75rem;
 }
 
 p,
@@ -45,16 +45,16 @@ button,
 .form-control,
 .form-select,
 textarea {
-    min-height: 2.75rem;
+    min-height: 3.4375rem;
 }
 
 .btn {
-    padding: 0.65rem 1rem;
+    padding: 0.8125rem 1.25rem;
 }
 
 .form-control,
 .form-select {
-    padding: 0.65rem 0.85rem;
+    padding: 0.8125rem 1.0625rem;
 }
 
 .form-text,
@@ -63,11 +63,11 @@ small {
 }
 
 html[data-text-size="large"] {
-    font-size: 20px;
+    font-size: 25px;
 }
 
 html[data-text-size="x-large"] {
-    font-size: 22px;
+    font-size: 27.5px;
 }
 
 [data-bs-theme="light"] body {
@@ -223,19 +223,19 @@ a:not(.btn):hover {
 
 .skip-link {
     position: absolute;
-    left: 1rem;
-    top: -3rem;
+    left: 1.25rem;
+    top: -3.75rem;
     z-index: 1000;
     background-color: #ffffff;
     color: #000000;
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
+    padding: 0.9375rem 1.25rem;
+    border-radius: 0.625rem;
     text-decoration: none;
-    box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.2);
+    box-shadow: 0 0.3125rem 1.25rem rgba(0, 0, 0, 0.2);
 }
 
 .skip-link:focus {
-    top: 1rem;
+    top: 1.25rem;
 }
 
 [data-bs-theme="dark"] .skip-link {
@@ -244,7 +244,7 @@ a:not(.btn):hover {
 }
 
 .text-size-control {
-    min-width: 11rem;
+    min-width: 13.75rem;
 }
 
 .text-size-control .form-label {
@@ -254,8 +254,8 @@ a:not(.btn):hover {
 
 .text-size-control .form-select {
     min-height: auto;
-    padding-top: 0.4rem;
-    padding-bottom: 0.4rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
 }
 
 img {
@@ -267,5 +267,5 @@ img {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 15px;
+    padding: 0 18.75px;
 }

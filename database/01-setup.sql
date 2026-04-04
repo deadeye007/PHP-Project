@@ -180,3 +180,68 @@ CREATE TABLE two_factor_secrets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+-- Certificates & Badges System
+
+-- Certificate templates
+CREATE TABLE certificates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    template_html TEXT, -- HTML template for certificate
+    background_image VARCHAR(255), -- Path to background image
+    signature_image VARCHAR(255), -- Path to signature image
+    award_criteria ENUM('course_completion', 'quiz_passing', 'manual') DEFAULT 'course_completion',
+    course_id INT NULL, -- For course completion certificates
+    quiz_id INT NULL, -- For quiz passing certificates
+    passing_score INT NULL, -- Minimum score required for quiz certificates
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES courses(id),
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id)
+);
+
+-- Badge definitions
+CREATE TABLE badges (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    icon_path VARCHAR(255), -- Path to badge icon/image
+    color VARCHAR(7) DEFAULT '#007bff', -- Hex color for badge
+    award_criteria ENUM('course_completion', 'quiz_passing', 'lesson_completion', 'streak', 'manual') DEFAULT 'course_completion',
+    course_id INT NULL, -- For course completion badges
+    quiz_id INT NULL, -- For quiz passing badges
+    lesson_id INT NULL, -- For lesson completion badges
+    passing_score INT NULL, -- Minimum score required
+    streak_days INT NULL, -- For streak badges (consecutive days)
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES courses(id),
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id),
+    FOREIGN KEY (lesson_id) REFERENCES lessons(id)
+);
+
+-- Awarded certificates to users
+CREATE TABLE user_certificates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    certificate_id INT NOT NULL,
+    awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    verification_code VARCHAR(32) UNIQUE NOT NULL, -- For certificate verification
+    metadata JSON, -- Store additional data like scores, completion dates
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (certificate_id) REFERENCES certificates(id),
+    UNIQUE KEY unique_user_certificate (user_id, certificate_id)
+);
+
+-- Awarded badges to users
+CREATE TABLE user_badges (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    badge_id INT NOT NULL,
+    awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    metadata JSON, -- Store additional data like scores, completion info
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (badge_id) REFERENCES badges(id),
+    UNIQUE KEY unique_user_badge (user_id, badge_id)
+);

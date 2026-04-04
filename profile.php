@@ -59,6 +59,11 @@ $stmt = $pdo->prepare("SELECT COUNT(*) as completed FROM user_progress WHERE use
 $stmt->execute([$_SESSION['user_id']]);
 $completed = $stmt->fetch(PDO::FETCH_ASSOC)['completed'];
 $content .= '<p><strong>Lessons Completed:</strong> ' . $completed . '</p>';
+
+// Get certificates and badges
+$certificates = getUserCertificates($_SESSION['user_id']);
+$badges = getUserBadges($_SESSION['user_id']);
+
 $content .= '</div>';
 
 $content .= '<div class="col-md-6">';
@@ -82,6 +87,58 @@ $content .= '</form>';
 $content .= '<hr>';
 $content .= '<h3>Security Settings</h3>';
 $content .= '<p><a href="2fa_setup.php" class="btn btn-outline-primary">Setup Two-Factor Authentication</a></p>';
+$content .= '</div>';
+$content .= '</div>';
+
+// Certificates & Badges Section
+$content .= '<div class="row mt-4">';
+$content .= '<div class="col-12">';
+$content .= '<h3>Certificates & Achievements</h3>';
+
+if (empty($certificates) && empty($badges)) {
+    $content .= '<p class="text-muted">No certificates or badges earned yet. Complete courses and quizzes to earn achievements!</p>';
+} else {
+    // Certificates
+    if (!empty($certificates)) {
+        $content .= '<h4>Certificates</h4>';
+        $content .= '<div class="row">';
+        foreach ($certificates as $cert) {
+            $content .= '<div class="col-md-6 col-lg-4 mb-3">';
+            $content .= '<div class="card h-100">';
+            $content .= '<div class="card-body">';
+            $content .= '<h5 class="card-title">' . htmlspecialchars($cert['title']) . '</h5>';
+            $content .= '<p class="card-text">' . htmlspecialchars($cert['description']) . '</p>';
+            $content .= '<p class="card-text"><small class="text-muted">Awarded: ' . date('M j, Y', strtotime($cert['awarded_at'])) . '</small></p>';
+            $content .= '<a href="view_certificate.php?id=' . $cert['id'] . '" class="btn btn-primary btn-sm">View Certificate</a>';
+            $content .= '</div>';
+            $content .= '</div>';
+            $content .= '</div>';
+        }
+        $content .= '</div>';
+    }
+
+    // Badges
+    if (!empty($badges)) {
+        $content .= '<h4 class="mt-4">Badges</h4>';
+        $content .= '<div class="row">';
+        foreach ($badges as $badge) {
+            $content .= '<div class="col-md-4 col-lg-3 mb-3">';
+            $content .= '<div class="card h-100 text-center">';
+            $content .= '<div class="card-body">';
+            $content .= '<div class="mb-2">';
+            $content .= '<span class="badge" style="background-color: ' . htmlspecialchars($badge['color']) . '; font-size: 2rem; padding: 0.5rem;">🏆</span>';
+            $content .= '</div>';
+            $content .= '<h6 class="card-title">' . htmlspecialchars($badge['name']) . '</h6>';
+            $content .= '<p class="card-text small">' . htmlspecialchars($badge['description']) . '</p>';
+            $content .= '<p class="card-text"><small class="text-muted">Earned: ' . date('M j, Y', strtotime($badge['awarded_at'])) . '</small></p>';
+            $content .= '</div>';
+            $content .= '</div>';
+            $content .= '</div>';
+        }
+        $content .= '</div>';
+    }
+}
+
 $content .= '</div>';
 $content .= '</div>';
 

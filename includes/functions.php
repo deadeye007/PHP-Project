@@ -69,7 +69,20 @@ function getUserProgress($user_id, $lesson_id) {
 function markLessonComplete($user_id, $lesson_id) {
     global $pdo;
     $stmt = $pdo->prepare("INSERT INTO user_progress (user_id, lesson_id, completed, completed_at) VALUES (?, ?, TRUE, NOW()) ON DUPLICATE KEY UPDATE completed = TRUE, completed_at = NOW()");
-    $stmt->execute([$user_id, $lesson_id]);
+    $result = $stmt->execute([$user_id, $lesson_id]);
+
+    if ($result) {
+        // Check for lesson completion badges
+        checkAndAwardCredentials($user_id, 'lesson_completed', $lesson_id);
+
+        // Check if course is now completed
+        $lesson = getLesson($lesson_id);
+        if ($lesson && isCourseCompleted($user_id, $lesson['course_id'])) {
+            checkAndAwardCredentials($user_id, 'course_completed', $lesson['course_id']);
+        }
+    }
+
+    return $result;
 }
 
 // Sanitize input
@@ -703,6 +716,11 @@ function gradeQuizSubmission($quiz_id, $user_id, $submitted_answers) {
 
         $pdo->commit();
 
+        // Check for quiz passing awards if the quiz was passed
+        if ($passed) {
+            checkAndAwardCredentials($user_id, 'quiz_passed', $quiz_id);
+        }
+
         return [
             'success' => true,
             'attempt_id' => $attempt_id,
@@ -923,4 +941,337 @@ function getCourseGradebook($course_id) {
         'students' => $students
     ];
 }
+
+// ===== CERTIFICATES & BADGES SYSTEM =====
+
+// Check if user has completed a course (all lessons marked complete)
+function isCourseCompleted($user_id, $course_id) {
+    global $pdo;
+
+    // Get total lessons in course
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM lessons WHERE course_id = ?");
+    $stmt->execute([$course_id]);
+    $total_lessons = $stmt->fetch()['total'];
+
+    if ($total_lessons == 0) return false;
+
+    // Get completed lessons by user
+    $stmt = $pdo->prepare("SELECT COUNT(*) as completed FROM user_progress up JOIN lessons l ON up.lesson_id = l.id WHERE up.user_id = ? AND l.course_id = ? AND up.completed = TRUE");
+    $stmt->execute([$user_id, $course_id]);
+    $completed_lessons = $stmt->fetch()['completed'];
+
+    return $completed_lessons == $total_lessons;
+}
+
+// Check if user has passed a quiz with required score
+function hasPassedQuiz($user_id, $quiz_id, $min_score = 70) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("SELECT percentage, passed FROM quiz_attempts WHERE user_id = ? AND quiz_id = ? ORDER BY submitted_at DESC LIMIT 1");
+    $stmt->execute([$user_id, $quiz_id]);
+    $attempt = $stmt->fetch();
+
+    return $attempt && $attempt['passed'] && $attempt['percentage'] >= $min_score;
+}
+
+// Check if user has completed a lesson
+function hasCompletedLesson($user_id, $lesson_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("SELECT completed FROM user_progress WHERE user_id = ? AND lesson_id = ?");
+    $stmt->execute([$user_id, $lesson_id]);
+    $progress = $stmt->fetch();
+
+    return $progress && $progress['completed'];
+}
+
+// Check learning streak (consecutive days with activity)
+function getLearningStreak($user_id) {
+    global $pdo;
+
+    // Get user's activity dates (lesson completions or quiz attempts)
+    $stmt = $pdo->prepare("
+        SELECT DISTINCT DATE(completed_at) as activity_date
+        FROM user_progress
+        WHERE user_id = ? AND completed = TRUE
+        UNION
+        SELECT DISTINCT DATE(submitted_at) as activity_date
+        FROM quiz_attempts
+        WHERE user_id = ?
+        ORDER BY activity_date DESC
+    ");
+    $stmt->execute([$user_id, $user_id]);
+    $activity_dates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($activity_dates)) return 0;
+
+    $streak = 0;
+    $current_date = new DateTime();
+
+    foreach ($activity_dates as $date) {
+        $activity_date = new DateTime($date);
+        $days_diff = $current_date->diff($activity_date)->days;
+
+        if ($days_diff == $streak) {
+            $streak++;
+        } elseif ($days_diff > $streak) {
+            break; // Gap in streak
+        }
+    }
+
+    return $streak;
+}
+
+// Award certificate automatically
+function awardCertificate($user_id, $certificate_id) {
+    global $pdo;
+
+    // Check if already awarded
+    $stmt = $pdo->prepare("SELECT id FROM user_certificates WHERE user_id = ? AND certificate_id = ?");
+    $stmt->execute([$user_id, $certificate_id]);
+    if ($stmt->fetch()) {
+        return false; // Already awarded
+    }
+
+    // Generate verification code
+    $verification_code = bin2hex(random_bytes(16));
+
+    // Get certificate details for metadata
+    $stmt = $pdo->prepare("SELECT c.*, co.title as course_title, q.title as quiz_title FROM certificates c LEFT JOIN courses co ON c.course_id = co.id LEFT JOIN quizzes q ON c.quiz_id = q.id WHERE c.id = ?");
+    $stmt->execute([$certificate_id]);
+    $certificate = $stmt->fetch();
+
+    $metadata = [
+        'awarded_at' => date('Y-m-d H:i:s'),
+        'certificate_title' => $certificate['title']
+    ];
+
+    if ($certificate['award_criteria'] === 'course_completion' && $certificate['course_id']) {
+        $metadata['course_id'] = $certificate['course_id'];
+        $metadata['course_title'] = $certificate['course_title'];
+    } elseif ($certificate['award_criteria'] === 'quiz_passing' && $certificate['quiz_id']) {
+        $metadata['quiz_id'] = $certificate['quiz_id'];
+        $metadata['quiz_title'] = $certificate['quiz_title'];
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO user_certificates (user_id, certificate_id, verification_code, metadata) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$user_id, $certificate_id, $verification_code, json_encode($metadata)]);
+
+    logAuditEvent('certificate_awarded', $user_id, [
+        'certificate_id' => $certificate_id,
+        'certificate_title' => $certificate['title'],
+        'verification_code' => $verification_code
+    ]);
+
+    return $verification_code;
+}
+
+// Award badge automatically
+function awardBadge($user_id, $badge_id) {
+    global $pdo;
+
+    // Check if already awarded
+    $stmt = $pdo->prepare("SELECT id FROM user_badges WHERE user_id = ? AND badge_id = ?");
+    $stmt->execute([$user_id, $badge_id]);
+    if ($stmt->fetch()) {
+        return false; // Already awarded
+    }
+
+    // Get badge details for metadata
+    $stmt = $pdo->prepare("SELECT b.*, co.title as course_title, q.title as quiz_title, l.title as lesson_title FROM badges b LEFT JOIN courses co ON b.course_id = co.id LEFT JOIN quizzes q ON b.quiz_id = q.id LEFT JOIN lessons l ON b.lesson_id = l.id WHERE b.id = ?");
+    $stmt->execute([$badge_id]);
+    $badge = $stmt->fetch();
+
+    $metadata = [
+        'awarded_at' => date('Y-m-d H:i:s'),
+        'badge_name' => $badge['name']
+    ];
+
+    if ($badge['award_criteria'] === 'course_completion' && $badge['course_id']) {
+        $metadata['course_id'] = $badge['course_id'];
+        $metadata['course_title'] = $badge['course_title'];
+    } elseif ($badge['award_criteria'] === 'quiz_passing' && $badge['quiz_id']) {
+        $metadata['quiz_id'] = $badge['quiz_id'];
+        $metadata['quiz_title'] = $badge['quiz_title'];
+    } elseif ($badge['award_criteria'] === 'lesson_completion' && $badge['lesson_id']) {
+        $metadata['lesson_id'] = $badge['lesson_id'];
+        $metadata['lesson_title'] = $badge['lesson_title'];
+    } elseif ($badge['award_criteria'] === 'streak') {
+        $metadata['streak_days'] = $badge['streak_days'];
+    }
+
+    $stmt = $pdo->prepare("INSERT INTO user_badges (user_id, badge_id, metadata) VALUES (?, ?, ?)");
+    $stmt->execute([$user_id, $badge_id, json_encode($metadata)]);
+
+    logAuditEvent('badge_awarded', $user_id, [
+        'badge_id' => $badge_id,
+        'badge_name' => $badge['name']
+    ]);
+
+    return true;
+}
+
+// Check and award certificates/badges based on user actions
+function checkAndAwardCredentials($user_id, $action_type, $target_id = null) {
+    global $pdo;
+
+    $awarded = [];
+
+    // Get active certificates/badges that match the criteria
+    if ($action_type === 'course_completed') {
+        // Course completion certificates
+        $stmt = $pdo->prepare("SELECT id FROM certificates WHERE award_criteria = 'course_completion' AND course_id = ? AND is_active = TRUE");
+        $stmt->execute([$target_id]);
+        $certificates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($certificates as $cert_id) {
+            if (awardCertificate($user_id, $cert_id)) {
+                $awarded['certificates'][] = $cert_id;
+            }
+        }
+
+        // Course completion badges
+        $stmt = $pdo->prepare("SELECT id FROM badges WHERE award_criteria = 'course_completion' AND course_id = ? AND is_active = TRUE");
+        $stmt->execute([$target_id]);
+        $badges = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($badges as $badge_id) {
+            if (awardBadge($user_id, $badge_id)) {
+                $awarded['badges'][] = $badge_id;
+            }
+        }
+
+    } elseif ($action_type === 'quiz_passed') {
+        // Quiz passing certificates
+        $stmt = $pdo->prepare("SELECT id FROM certificates WHERE award_criteria = 'quiz_passing' AND quiz_id = ? AND is_active = TRUE");
+        $stmt->execute([$target_id]);
+        $certificates = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($certificates as $cert_id) {
+            // Check if user passed with required score
+            $stmt = $pdo->prepare("SELECT passing_score FROM certificates WHERE id = ?");
+            $stmt->execute([$cert_id]);
+            $cert = $stmt->fetch();
+
+            if (hasPassedQuiz($user_id, $target_id, $cert['passing_score'])) {
+                if (awardCertificate($user_id, $cert_id)) {
+                    $awarded['certificates'][] = $cert_id;
+                }
+            }
+        }
+
+        // Quiz passing badges
+        $stmt = $pdo->prepare("SELECT id FROM badges WHERE award_criteria = 'quiz_passing' AND quiz_id = ? AND is_active = TRUE");
+        $stmt->execute([$target_id]);
+        $badges = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($badges as $badge_id) {
+            // Check if user passed with required score
+            $stmt = $pdo->prepare("SELECT passing_score FROM badges WHERE id = ?");
+            $stmt->execute([$badge_id]);
+            $badge = $stmt->fetch();
+
+            if (hasPassedQuiz($user_id, $target_id, $badge['passing_score'])) {
+                if (awardBadge($user_id, $badge_id)) {
+                    $awarded['badges'][] = $badge_id;
+                }
+            }
+        }
+
+    } elseif ($action_type === 'lesson_completed') {
+        // Lesson completion badges
+        $stmt = $pdo->prepare("SELECT id FROM badges WHERE award_criteria = 'lesson_completion' AND lesson_id = ? AND is_active = TRUE");
+        $stmt->execute([$target_id]);
+        $badges = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($badges as $badge_id) {
+            if (awardBadge($user_id, $badge_id)) {
+                $awarded['badges'][] = $badge_id;
+            }
+        }
+
+    } elseif ($action_type === 'daily_check') {
+        // Check streak badges
+        $current_streak = getLearningStreak($user_id);
+        $stmt = $pdo->prepare("SELECT id FROM badges WHERE award_criteria = 'streak' AND streak_days <= ? AND is_active = TRUE");
+        $stmt->execute([$current_streak]);
+        $badges = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        foreach ($badges as $badge_id) {
+            if (awardBadge($user_id, $badge_id)) {
+                $awarded['badges'][] = $badge_id;
+            }
+        }
+    }
+
+    return $awarded;
+}
+
+// Get user's certificates
+function getUserCertificates($user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT uc.*, c.title, c.description, c.template_html
+        FROM user_certificates uc
+        JOIN certificates c ON uc.certificate_id = c.id
+        WHERE uc.user_id = ?
+        ORDER BY uc.awarded_at DESC
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get user's badges
+function getUserBadges($user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        SELECT ub.*, b.name, b.description, b.icon_path, b.color
+        FROM user_badges ub
+        JOIN badges b ON ub.badge_id = b.id
+        WHERE ub.user_id = ?
+        ORDER BY ub.awarded_at DESC
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Generate certificate PDF/HTML (basic HTML version for now)
+function generateCertificateHTML($certificate_id, $user_id) {
+    global $pdo;
+
+    // Get certificate and user data
+    $stmt = $pdo->prepare("
+        SELECT uc.*, c.title, c.description, c.template_html, u.username
+        FROM user_certificates uc
+        JOIN certificates c ON uc.certificate_id = c.id
+        JOIN users u ON uc.user_id = u.id
+        WHERE uc.certificate_id = ? AND uc.user_id = ?
+    ");
+    $stmt->execute([$certificate_id, $user_id]);
+    $data = $stmt->fetch();
+
+    if (!$data) return null;
+
+    $metadata = json_decode($data['metadata'], true);
+
+    // Replace placeholders in template
+    $html = $data['template_html'];
+    $html = str_replace('{{student_name}}', htmlspecialchars($data['username']), $html);
+    $html = str_replace('{{certificate_title}}', htmlspecialchars($data['title']), $html);
+    $html = str_replace('{{completion_date}}', date('F j, Y', strtotime($metadata['awarded_at'])), $html);
+    $html = str_replace('{{verification_code}}', $data['verification_code'], $html);
+
+    // Add course/quiz info if available
+    if (isset($metadata['course_title'])) {
+        $html = str_replace('{{course_title}}', htmlspecialchars($metadata['course_title']), $html);
+    }
+    if (isset($metadata['quiz_title'])) {
+        $html = str_replace('{{quiz_title}}', htmlspecialchars($metadata['quiz_title']), $html);
+    }
+
+    return $html;
+}
+
 ?>
