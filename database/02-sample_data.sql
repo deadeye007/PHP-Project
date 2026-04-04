@@ -26,3 +26,16 @@ INSERT INTO lessons (course_id, title, content, order_num) VALUES
 INSERT INTO user_progress (user_id, lesson_id, completed) VALUES
 (2, 1, TRUE),
 (2, 2, TRUE);
+
+-- Sample certificates
+INSERT INTO certificates (title, description, template_html, award_criteria, course_id, is_active) VALUES
+('PHP Fundamentals Certificate', 'Awarded for completing the Introduction to PHP course', '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;"><h1 style="color: #333; margin-bottom: 20px;">Certificate of Completion</h1><p style="font-size: 18px; margin: 20px 0;">This certifies that</p><h2 style="color: #007bff; margin: 30px 0;">{{student_name}}</h2><p style="font-size: 16px; margin: 20px 0;">has successfully completed</p><h3 style="margin: 30px 0;">{{course_title}}</h3><p style="font-size: 14px; margin: 40px 0;">Awarded on {{completion_date}}</p><div style="margin-top: 50px;"><p>Verification Code: {{verification_code}}</p></div></div>', 'course_completion', 1, TRUE),
+('Web Development Certificate', 'Awarded for completing the Web Development Basics course', '<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;"><h1 style="color: #333; margin-bottom: 20px;">Certificate of Completion</h1><p style="font-size: 18px; margin: 20px 0;">This certifies that</p><h2 style="color: #007bff; margin: 30px 0;">{{student_name}}</h2><p style="font-size: 16px; margin: 20px 0;">has successfully completed</p><h3 style="margin: 30px 0;">{{course_title}}</h3><p style="font-size: 14px; margin: 40px 0;">Awarded on {{completion_date}}</p><div style="margin-top: 50px;"><p>Verification Code: {{verification_code}}</p></div></div>', 'course_completion', 2, TRUE);
+
+-- Sample badges
+INSERT INTO badges (name, description, award_criteria, course_id, color, is_active) VALUES
+('PHP Beginner', 'Completed Introduction to PHP course', 'course_completion', 1, '#007bff', TRUE),
+('Web Developer', 'Completed Web Development Basics course', 'course_completion', 2, '#28a745', TRUE),
+('Database Expert', 'Completed Database Design course', 'course_completion', 3, '#dc3545', TRUE),
+('Quick Learner', 'Completed a lesson', 'lesson_completion', NULL, '#ffc107', TRUE),
+('Dedicated Student', '7-day learning streak', 'streak', NULL, '#6f42c1', TRUE);
