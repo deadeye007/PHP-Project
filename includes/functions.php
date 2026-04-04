@@ -1063,6 +1063,13 @@ function awardCertificate($user_id, $certificate_id) {
         'verification_code' => $verification_code
     ]);
 
+    // Send message to user about certificate
+    $message_subject = "🎓 Congratulations! You earned a certificate";
+    $message_content = "You have been awarded the certificate: " . $certificate['title'] . "\n\n" .
+        "Verification Code: " . $verification_code . "\n\n" .
+        "Visit your profile to view and download your certificate.";
+    sendSystemMessage($user_id, $message_subject, $message_content);
+
     return $verification_code;
 }
 
@@ -1107,6 +1114,13 @@ function awardBadge($user_id, $badge_id) {
         'badge_id' => $badge_id,
         'badge_name' => $badge['name']
     ]);
+
+    // Send message to user about badge
+    $message_subject = "🏆 You unlocked a badge!";
+    $message_content = "Great job! You've earned the badge: " . $badge['name'] . "\n\n" .
+        $badge['description'] . "\n\n" .
+        "View all your badges on your profile.";
+    sendSystemMessage($user_id, $message_subject, $message_content);
 
     return true;
 }
@@ -1272,6 +1286,204 @@ function generateCertificateHTML($certificate_id, $user_id) {
     }
 
     return $html;
+}
+
+// ===== MESSAGING SYSTEM =====
+
+// Send a message to another user
+function sendMessage($sender_id, $recipient_id, $subject, $content) {
+    global $pdo;
+
+    $subject = trim($subject);
+    $content = trim($content);
+
+    if (empty($subject) || empty($content)) {
+        return ['success' => false, 'message' => 'Subject and message content are required.'];
+    }
+
+    if ($sender_id === $recipient_id) {
+        return ['success' => false, 'message' => 'You cannot send a message to yourself.'];
+    }
+
+    try {
+        $stmt = $pdo->prepare("INSERT INTO messages (sender_id, recipient_id, subject, content) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$sender_id, $recipient_id, $subject, $content]);
+
+        logAuditEvent('message_sent', $sender_id, [
+            'recipient_id' => $recipient_id,
+            'subject' => $subject
+        ]);
+
+        return ['success' => true, 'message_id' => (int)$pdo->lastInsertId()];
+    } catch (Throwable $e) {
+        return ['success' => false, 'message' => 'Failed to send message.'];
+    }
+}
+
+// Get user's inbox (messages received)
+function getInbox($user_id, $limit = 50, $offset = 0) {
+    global $pdo;
+
+    $limit = (int)$limit;
+    $offset = (int)$offset;
+
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.username as sender_username, u.id as sender_id
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.recipient_id = ?
+        ORDER BY m.created_at DESC
+        LIMIT $limit OFFSET $offset
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get user's sent messages
+function getSentMessages($user_id, $limit = 50, $offset = 0) {
+    global $pdo;
+
+    $limit = (int)$limit;
+    $offset = (int)$offset;
+
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.username as recipient_username, u.id as recipient_id
+        FROM messages m
+        JOIN users u ON m.recipient_id = u.id
+        WHERE m.sender_id = ?
+        ORDER BY m.created_at DESC
+        LIMIT $limit OFFSET $offset
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get conversation between two users
+function getConversation($user_id, $other_user_id, $limit = 100) {
+    global $pdo;
+
+    $limit = (int)$limit;
+
+    $stmt = $pdo->prepare("
+        SELECT m.*, 
+               CASE WHEN m.sender_id = ? THEN u2.username ELSE u1.username END as other_username,
+               CASE WHEN m.sender_id = ? THEN 'sent' ELSE 'received' END as direction
+        FROM messages m
+        JOIN users u1 ON m.sender_id = u1.id
+        JOIN users u2 ON m.recipient_id = u2.id
+        WHERE (m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)
+        ORDER BY m.created_at DESC
+        LIMIT $limit
+    ");
+    $stmt->execute([$user_id, $user_id, $user_id, $other_user_id, $other_user_id, $user_id]);
+    return array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
+// Get message details
+function getMessage($message_id, $user_id = null) {
+    global $pdo;
+
+    $sql = "
+        SELECT m.*, u.username as sender_username
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.id = ?
+    ";
+    $params = [$message_id];
+
+    if ($user_id !== null) {
+        $sql .= " AND (m.recipient_id = ? OR m.sender_id = ?)";
+        $params[] = $user_id;
+        $params[] = $user_id;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Mark message as read
+function markMessageAsRead($message_id, $user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE id = ? AND recipient_id = ?");
+    return $stmt->execute([$message_id, $user_id]);
+}
+
+// Get unread message count
+function getUnreadMessageCount($user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND is_read = FALSE");
+    $stmt->execute([$user_id]);
+    return (int)$stmt->fetchColumn();
+}
+
+// Get unread messages
+function getUnreadMessages($user_id, $limit = 10) {
+    global $pdo;
+
+    $limit = (int)$limit;
+
+    $stmt = $pdo->prepare("
+        SELECT m.*, u.username as sender_username
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        WHERE m.recipient_id = ? AND m.is_read = FALSE
+        ORDER BY m.created_at DESC
+        LIMIT $limit
+    ");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Delete message
+function deleteMessage($message_id, $user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("DELETE FROM messages WHERE id = ? AND (recipient_id = ? OR sender_id = ?)");
+    return $stmt->execute([$message_id, $user_id, $user_id]);
+}
+
+// Get total messages count (inbox)
+function getInboxCount($user_id) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE recipient_id = ?");
+    $stmt->execute([$user_id]);
+    return (int)$stmt->fetchColumn();
+}
+
+// Send system message (from system/admin to user)
+function sendSystemMessage($recipient_id, $subject, $content) {
+    global $pdo;
+
+    // System messages come from the admin user (id=1)
+    // You can change this to a different user if needed
+
+    try {
+        $stmt = $pdo->prepare("INSERT INTO messages (sender_id, recipient_id, subject, content) VALUES (1, ?, ?, ?)");
+        $stmt->execute([$recipient_id, $subject, $content]);
+        return ['success' => true, 'message_id' => (int)$pdo->lastInsertId()];
+    } catch (Throwable $e) {
+        return ['success' => false, 'message' => 'Failed to send system message.'];
+    }
+}
+
+// Get message recipients (for composer autocomplete/dropdown)
+function getMessageRecipients($user_id, $search = '') {
+    global $pdo;
+
+    $search = '%' . $search . '%';
+    $stmt = $pdo->prepare("
+        SELECT id, username, email
+        FROM users
+        WHERE id != ? AND (username LIKE ? OR email LIKE ?)
+        ORDER BY username
+        LIMIT 20
+    ");
+    $stmt->execute([$user_id, $search, $search]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ?>
