@@ -79,6 +79,15 @@ $content .= '<p><small>Use the editor toolbar to switch to HTML source editing i
 $content .= '<button type="submit" class="btn btn-primary">Save</button> <a href="lessons.php?course_id=' . $course_id . '" class="btn btn-secondary">Cancel</a>';
 $content .= '</form>';
 
+// Add assignments link if lesson exists
+if ($lesson) {
+    $content .= '<div class="mt-4"><div class="card"><div class="card-header"><h5 class="mb-0">📝 Assignments</h5></div><div class="card-body">';
+    $lesson_assignments = getLessonAssignments($lesson['id']);
+    $content .= '<p>This lesson has ' . count($lesson_assignments) . ' assignment(s).</p>';
+    $content .= '<a href="assignments.php?lesson_id=' . $lesson['id'] . '" class="btn btn-primary">Manage Assignments</a>';
+    $content .= '</div></div></div>';
+}
+
 $tinyMceApiKey = defined('TINYMCE_API_KEY') && TINYMCE_API_KEY !== '' ? TINYMCE_API_KEY : 'no-api-key';
 $content .= '<script src="https://cdn.tiny.cloud/1/' . rawurlencode($tinyMceApiKey) . '/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>';
 $content .= '<script>

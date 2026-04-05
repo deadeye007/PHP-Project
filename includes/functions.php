@@ -1764,4 +1764,328 @@ function sendBulkMessageToStudents($course_id, $subject, $content, $sender_id) {
     return ['success' => $count > 0, 'count' => $count];
 }
 
+// ===== ASSIGNMENTS SYSTEM =====
+
+// Create a new assignment
+function createAssignment($lesson_id, $course_id, $title, $description, $assignment_type, $points_possible = 100, $grading_type = 'points', $submission_deadline = null) {
+    global $pdo;
+
+    $stmt = $pdo->prepare("
+        INSERT INTO assignments (lesson_id, course_id, title, description, assignment_type, points_possible, grading_type, submission_deadline, is_draft, allow_resubmission)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+    ");
+    
+    $result = $stmt->execute([$lesson_id, $course_id, $title, $description, $assignment_type, $points_possible, $grading_type, $submission_deadline]);
+    
+    if ($result) {
+        $assignment_id = (int)$pdo->lastInsertId();
+        logAuditEvent('create_assignment', $_SESSION['user_id'] ?? null, ['assignment_id' => $assignment_id, 'title' => $title, 'type' => $assignment_type]);
+        return ['success' => true, 'assignment_id' => $assignment_id];
+    }
+    
+    return ['success' => false];
+}
+
+// Get all assignments for a lesson
+function getLessonAssignments($lesson_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT id, title, description, assignment_type, points_possible, grading_type, submission_deadline, is_published, show_to_students
+        FROM assignments
+        WHERE lesson_id = ?
+        ORDER BY created_at DESC
+    ");
+    $stmt->execute([$lesson_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get a specific assignment
+function getAssignment($assignment_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT * 
+        FROM assignments
+        WHERE id = ?
+    ");
+    $stmt->execute([$assignment_id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Update assignment
+function updateAssignment($assignment_id, $updates) {
+    global $pdo;
+    
+    $allowed_fields = ['title', 'description', 'assignment_type', 'points_possible', 'grading_type', 'submission_deadline', 'is_published', 'show_to_students', 'allow_file_upload', 'allowed_file_types', 'max_file_size_mb'];
+    
+    $set_clause = [];
+    $values = [];
+    
+    foreach ($updates as $key => $value) {
+        if (in_array($key, $allowed_fields)) {
+            $set_clause[] = "$key = ?";
+            $values[] = $value;
+        }
+    }
+    
+    if (empty($set_clause)) {
+        return ['success' => false];
+    }
+    
+    $values[] = $assignment_id;
+    
+    $stmt = $pdo->prepare("UPDATE assignments SET " . implode(', ', $set_clause) . ", updated_at = NOW() WHERE id = ?");
+    $result = $stmt->execute($values);
+    
+    return ['success' => $result];
+}
+
+// Get assignment submissions
+function getAssignmentSubmissions($assignment_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT s.*, u.username, u.email, 
+               COALESCE(sg.final_points, 0) as grade, 
+               sg.feedback_text, 
+               sg.is_published as grade_published
+        FROM submissions s
+        JOIN users u ON s.user_id = u.id
+        LEFT JOIN submission_grades sg ON s.id = sg.submission_id
+        WHERE s.assignment_id = ?
+        ORDER BY u.username ASC
+    ");
+    $stmt->execute([$assignment_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// Get student's latest submission for an assignment
+function getStudentSubmission($assignment_id, $user_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT s.*, sg.points_earned, sg.final_points, sg.feedback_text, sg.is_published as grade_published
+        FROM submissions s
+        LEFT JOIN submission_grades sg ON s.id = sg.submission_id
+        WHERE s.assignment_id = ? AND s.user_id = ?
+        ORDER BY s.submission_number DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$assignment_id, $user_id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Submit an assignment
+function submitAssignment($assignment_id, $user_id, $text_content = null, $file_path = null, $file_name = null) {
+    global $pdo;
+    
+    $assignment = getAssignment($assignment_id);
+    if (!$assignment) {
+        return ['success' => false, 'message' => 'Assignment not found'];
+    }
+    
+    // Get current submission count for this user
+    $stmt = $pdo->prepare("SELECT MAX(submission_number) as max_num FROM submissions WHERE assignment_id = ? AND user_id = ?");
+    $stmt->execute([$assignment_id, $user_id]);
+    $result = $stmt->fetch();
+    $submission_number = ($result['max_num'] ?? 0) + 1;
+    
+    // Insert submission
+    $stmt = $pdo->prepare("
+        INSERT INTO submissions (assignment_id, user_id, submission_number, text_content, file_path, file_name, is_submitted, submitted_at)
+        VALUES (?, ?, ?, ?, ?, ?, 1, NOW())
+    ");
+    
+    $result = $stmt->execute([$assignment_id, $user_id, $submission_number, $text_content, $file_path, $file_name]);
+    
+    if ($result) {
+        $submission_id = (int)$pdo->lastInsertId();
+        
+        // Check if submission is late
+        if ($assignment['submission_deadline'] && time() > strtotime($assignment['submission_deadline'])) {
+            $days_late = ceil((time() - strtotime($assignment['submission_deadline'])) / 86400);
+            $stmt = $pdo->prepare("UPDATE submissions SET days_late = ? WHERE id = ?");
+            $stmt->execute([$days_late, $submission_id]);
+        }
+        
+        return ['success' => true, 'submission_id' => $submission_id];
+    }
+    
+    return ['success' => false];
+}
+
+// Grade a submission
+function gradeSubmission($submission_id, $grader_id, $points_earned, $points_possible, $feedback = null, $rubric_scores = null) {
+    global $pdo;
+    
+    $submission = getSubmission($submission_id);
+    if (!$submission) {
+        return ['success' => false];
+    }
+    
+    // Calculate percentage
+    $percentage = $points_possible > 0 ? round(($points_earned / $points_possible) * 100, 2) : 0;
+    
+    // Apply late penalty if applicable
+    $late_penalty = 0;
+    if ($submission['days_late'] > 0) {
+        $assignment = getAssignment($submission['assignment_id']);
+        if ($assignment['late_submission_penalty_percent'] > 0) {
+            $late_penalty = round($points_earned * ($assignment['late_submission_penalty_percent'] / 100) * $submission['days_late'], 2);
+        }
+    }
+    
+    $final_points = max(0, $points_earned - $late_penalty);
+    
+    // Insert or update grade
+    $stmt = $pdo->prepare("
+        SELECT id FROM submission_grades WHERE submission_id = ?
+    ");
+    $stmt->execute([$submission_id]);
+    $existing_grade = $stmt->fetch();
+    
+    if ($existing_grade) {
+        $stmt = $pdo->prepare("
+            UPDATE submission_grades 
+            SET grader_id = ?, points_earned = ?, points_possible = ?, percentage = ?, 
+                late_penalty_points = ?, final_points = ?, feedback_text = ?, rubric_scores = ?, 
+                is_draft = 0, updated_at = NOW()
+            WHERE submission_id = ?
+        ");
+        $result = $stmt->execute([$grader_id, $points_earned, $points_possible, $percentage, $late_penalty, $final_points, $feedback, $rubric_scores, $submission_id]);
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO submission_grades (submission_id, grader_id, points_earned, points_possible, percentage, late_penalty_points, final_points, feedback_text, rubric_scores, is_draft)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ");
+        $result = $stmt->execute([$submission_id, $grader_id, $points_earned, $points_possible, $percentage, $late_penalty, $final_points, $feedback, $rubric_scores]);
+    }
+    
+    if ($result) {
+        // Update submission as graded
+        $stmt = $pdo->prepare("UPDATE submissions SET is_graded = 1, graded_at = NOW() WHERE id = ?");
+        $stmt->execute([$submission_id]);
+        
+        // If grade is being published, send notification to student
+        $stmt = $pdo->prepare("SELECT user_id, assignment_id FROM submissions WHERE id = ?");
+        $stmt->execute([$submission_id]);
+        $sub = $stmt->fetch();
+        
+        $assignment = getAssignment($sub['assignment_id']);
+        $subject = "📝 Grade Posted: " . $assignment['title'];
+        $content = "Your assignment \"" . $assignment['title'] . "\" has been graded.\n\n" .
+                   "Points: $final_points / $points_possible (" . $percentage . "%)\n";
+        if ($feedback) {
+            $content .= "\nFeedback:\n$feedback\n";
+        }
+        sendSystemMessage($sub['user_id'], $subject, $content);
+        
+        return ['success' => true];
+    }
+    
+    return ['success' => false];
+}
+
+// Get a submission
+function getSubmission($submission_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT s.*, 
+               COALESCE(sg.final_points, 0) as grade,
+               sg.feedback_text,
+               sg.is_published as grade_published
+        FROM submissions s
+        LEFT JOIN submission_grades sg ON s.id = sg.submission_id
+        WHERE s.id = ?
+    ");
+    $stmt->execute([$submission_id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Create a grading rubric
+function createRubric($assignment_id, $title, $description, $total_points) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO grading_rubrics (assignment_id, title, description, total_points)
+        VALUES (?, ?, ?, ?)
+    ");
+    
+    $result = $stmt->execute([$assignment_id, $title, $description, $total_points]);
+    
+    if ($result) {
+        return ['success' => true, 'rubric_id' => (int)$pdo->lastInsertId()];
+    }
+    
+    return ['success' => false];
+}
+
+// Get rubric
+function getRubric($rubric_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT r.*, 
+               GROUP_CONCAT(JSON_OBJECT('id', rc.id, 'title', rc.title, 'points', rc.points_possible) SEPARATOR ',') as criteria
+        FROM grading_rubrics r
+        LEFT JOIN rubric_criteria rc ON r.id = rc.rubric_id
+        WHERE r.id = ?
+        GROUP BY r.id
+    ");
+    $stmt->execute([$rubric_id]);
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Add rubric criteria
+function addRubricCriteria($rubric_id, $title, $description, $points_possible) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO rubric_criteria (rubric_id, title, description, points_possible)
+        VALUES (?, ?, ?, ?)
+    ");
+    
+    return $stmt->execute([$rubric_id, $title, $description, $points_possible]);
+}
+
+// Create peer review
+function createPeerReview($assignment_id, $submission_id, $reviewer_id, $review_text, $is_anonymous = false) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO peer_reviews (assignment_id, submission_id, reviewer_id, review_text, is_submitted, submitted_at, is_anonymous)
+        VALUES (?, ?, ?, ?, 1, NOW(), ?)
+    ");
+    
+    $result = $stmt->execute([$assignment_id, $submission_id, $reviewer_id, $review_text, $is_anonymous ? 1 : 0]);
+    
+    if ($result) {
+        return ['success' => true, 'review_id' => (int)$pdo->lastInsertId()];
+    }
+    
+    return ['success' => false];
+}
+
+// Get all submissions for student across assignments
+function getStudentSubmissionsSummary($user_id, $course_id) {
+    global $pdo;
+    
+    $stmt = $pdo->prepare("
+        SELECT a.id, a.title, a.assignment_type, a.points_possible, a.submission_deadline,
+               s.id as submission_id, s.is_submitted, s.submitted_at,
+               sg.final_points, sg.feedback_text, sg.is_published as grade_published
+        FROM assignments a
+        LEFT JOIN submissions s ON a.id = s.assignment_id AND s.user_id = ? AND s.submission_number = (
+            SELECT MAX(submission_number) FROM submissions WHERE assignment_id = a.id AND user_id = ?
+        )
+        LEFT JOIN submission_grades sg ON s.id = sg.submission_id
+        WHERE a.course_id = ? AND a.show_to_students = 1
+        ORDER BY a.created_at DESC
+    ");
+    $stmt->execute([$user_id, $user_id, $course_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 ?>

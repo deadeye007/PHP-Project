@@ -17,6 +17,15 @@ if (!$course) {
     $content = '<h2>' . $title . '</h2>';
     // description is sanitized at creation/edit-time
     $content .= '<div>' . $course['description'] . '</div>';
+    
+    // Add navigation for course sections
+    if (isLoggedIn()) {
+        $content .= '<div class="row my-4">';
+        $content .= '<div class="col-md-4"><a href="assignments.php?id=' . $course_id . '" class="btn btn-outline-primary w-100">📝 Assignments</a></div>';
+        $content .= '<div class="col-md-4"><a href="grades.php" class="btn btn-outline-info w-100">📊 My Grades</a></div>';
+        $content .= '<div class="col-md-4"><a href="inbox.php" class="btn btn-outline-secondary w-100">💬 Messages</a></div>';
+        $content .= '</div>';
+    }
 
     $lessons = getLessons($course_id);
     if ($lessons) {
