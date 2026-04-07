@@ -13,3 +13,8 @@ define('ENABLE_MARKDOWN', true);
 
 // TinyMCE configuration
 define('TINYMCE_API_KEY', getenv('TINYMCE_API_KEY') ?: '');
+
+// HTTPS feature flags
+define('HTTPS_ENABLED', getenv('HTTPS_ENABLED') === 'true');
+define('HTTPS_REDIRECT', getenv('HTTPS_REDIRECT') === 'true');
+define('HTTPS_HSTS', getenv('HTTPS_HSTS') === 'true');

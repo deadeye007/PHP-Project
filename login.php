@@ -2,11 +2,14 @@
 require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = sanitizeInput($_POST['username']);
-    $password = $_POST['password']; // Don't sanitize password
-    $ip = $_SERVER['REMOTE_ADDR'];
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = 'Invalid form submission. Please try again.';
+    } else {
+        $username = sanitizeInput($_POST['username']);
+        $password = $_POST['password']; // Don't sanitize password
+        $ip = $_SERVER['REMOTE_ADDR'];
 
-    // Check rate limiting
+        // Check rate limiting
     if (isLoginBlocked($username, $ip)) {
         logAuditEvent('login_blocked_rate_limit', null, ['username' => $username, 'ip' => $ip]);
         $error = 'Too many login attempts. Please try again later.';
@@ -54,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+}
 
 $title = 'Login';
 $content = '<h2>Login</h2>';
@@ -62,6 +66,7 @@ if (isset($error)) {
 }
 $content .= '
     <form method="post">
+        ' . csrfInputField() . '
         <div class="mb-3">
             <label for="username" class="form-label">Username</label>
             <input type="text" class="form-control" id="username" name="username" required maxlength="50">

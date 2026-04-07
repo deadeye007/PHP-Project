@@ -6,22 +6,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
     $password = $_POST['password'];
 
-    // Basic validation
-    if (strlen($username) < 3 || strlen($password) < 6) {
-        $error = 'Username must be at least 3 characters, password at least 6.';
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Invalid email address.';
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = 'Invalid form submission. Please try again.';
     } else {
-        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        // Basic validation
+        if (strlen($username) < 3) {
+            $error = 'Username must be at least 3 characters.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = 'Invalid email address.';
+        } else {
+            $passwordStrength = validatePasswordStrength($password);
+            if ($passwordStrength !== true) {
+                $error = $passwordStrength;
+            } else {
+                $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-        global $pdo;
-        try {
-            $stmt = $pdo->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
-            $stmt->execute([$username, $email, $hashedPassword]);
-            header('Location: login.php');
-            exit;
-        } catch (PDOException $e) {
-            $error = 'Registration failed: Username or email already exists.';
+                global $pdo;
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
+                    $stmt->execute([$username, $email, $hashedPassword]);
+                    header('Location: login.php');
+                    exit;
+                } catch (PDOException $e) {
+                    $error = 'Registration failed: Username or email already exists.';
+                }
+            }
         }
     }
 }
@@ -33,6 +42,7 @@ if (isset($error)) {
 }
 $content .= '
     <form method="post">
+        ' . csrfInputField() . '
         <div class="mb-3">
             <label for="username" class="form-label">Username</label>
             <input type="text" class="form-control" id="username" name="username" required maxlength="50">
@@ -43,7 +53,8 @@ $content .= '
         </div>
         <div class="mb-3">
             <label for="password" class="form-label">Password</label>
-            <input type="password" class="form-control" id="password" name="password" required minlength="6">
+            <input type="password" class="form-control" id="password" name="password" required minlength="8">
+            <div class="form-text">Use at least 8 characters, including uppercase, lowercase, numbers, and symbols.</div>
         </div>
         <button type="submit" class="btn btn-primary">Register</button>
     </form>

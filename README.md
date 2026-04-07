@@ -15,8 +15,9 @@ A PHP-based learning platform with courses, lessons, quizzes, and user progress 
 1. Install Docker and Docker Compose.
 2. Copy `.env.example` to `.env` and update values.
 3. Add your TinyMCE implementation key to `TINYMCE_API_KEY` in `.env` if you want to use the rich text editor without the demo key.
-4. Run `docker-compose up --build` in the project directory.
-5. Open http://localhost:8080 in your browser.
+4. If you plan to use HTTPS in production, set `HTTPS_ENABLED=true` in `.env` and configure your reverse proxy or Docker host accordingly. Do not enable this unless your site is served over TLS.
+5. Run `docker-compose up --build` in the project directory.
+6. Open http://localhost:8080 in your browser.
 
 ## Manual Setup (without Docker)
 1. Install PHP and MySQL (e.g., via Homebrew on macOS: `brew install php mysql`).
@@ -38,7 +39,8 @@ A PHP-based learning platform with courses, lessons, quizzes, and user progress 
 - Passwords are hashed using `password_hash()`.
 - SQL queries use prepared statements to prevent injection.
 - User input is sanitized.
-- Session cookies are configured for security.
+- Session cookies are configured for security, with optional HTTPS support via `.env`.
+- HTTPS enforcement is available via `HTTPS_REDIRECT=true` once TLS is configured.
 - Never commit `.env` files to version control.
 
 ## Technologies

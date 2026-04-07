@@ -25,6 +25,10 @@ $error = '';
 
 // Handle submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_assignment'])) {
+    if (!isset($_POST['csrf_token']) || !validateCsrfToken($_POST['csrf_token'])) {
+        $error = 'Invalid form submission. Please try again.';
+    }
+
     $text_content = null;
     $file_path = null;
     $file_name = null;
@@ -57,7 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_assignment']))
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0755, true);
             }
-            
+            $htaccessPath = $upload_dir . '.htaccess';
+            if (!file_exists($htaccessPath)) {
+                file_put_contents($htaccessPath, "Options -Indexes\n<IfModule mod_php7.c>\n    php_flag engine off\n</IfModule>\n<IfModule mod_php.c>\n    php_flag engine off\n</IfModule>\n<FilesMatch \"\\.(php|php5|phtml|pl|py|jsp|asp|aspx|cgi)\$\">\n    Require all denied\n</FilesMatch>\n");
+            }
+
             $file_name = $uploaded_file['name'];
             $file_path = 'submissions/' . $assignment_id . '/' . $user_id . '_' . time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', $file_name);
             
@@ -120,7 +128,7 @@ $content .= '</div></div>';
 
 // Submission form
 $content .= '<div class="card"><div class="card-header"><h5 class="mb-0">📤 Submit Your Work</h5></div><div class="card-body">';
-$content .= '<form method="POST" enctype="multipart/form-data">';
+$content .= '<form method="POST" enctype="multipart/form-data">' . csrfInputField();
 
 if (in_array($assignment['assignment_type'], ['essay', 'discussion'])) {
     $existing_text = $existing_submission['text_content'] ?? '';
